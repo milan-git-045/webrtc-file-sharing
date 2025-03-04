@@ -1,29 +1,27 @@
-# WebRTC File Sharing Application
+# WebRTC File Sharing
 
-A peer-to-peer file sharing application built with Angular and WebRTC that allows direct file transfer between browsers without storing files on a server.
+A real-time peer-to-peer file sharing application built with Angular and WebRTC. This application allows users to share files directly between browsers without uploading them to a server.
 
 ## Features
 
 - Direct peer-to-peer file transfer using WebRTC
-- Room-based connection system for secure peer pairing
-- Support for cross-network file sharing using STUN/TURN servers
-- Real-time transfer progress tracking
-- Modern and responsive UI
-- File download control for receivers
-- Automatic connection state management
-- Support for large file transfers
+- Real-time file transfer progress tracking
+- Support for any file type
+- Simple room-based connection system
+- Clean and modern UI
+- No file size limitations (browser dependent)
+- No server storage required - files are transferred directly between peers
 
 ## Prerequisites
 
-- Node.js (v14 or higher)
-- Angular CLI
-- A modern web browser that supports WebRTC (Chrome, Firefox, Edge, etc.)
+- Node.js (v18 or higher)
+- Angular CLI (v19.0.0)
 
 ## Installation
 
 1. Clone the repository:
 ```bash
-git clone [repository-url]
+git clone <repository-url>
 cd webrtc-file-sharing
 ```
 
@@ -35,107 +33,108 @@ npm install
 # Install server dependencies
 cd server
 npm install
+cd ..
 ```
-
-## Configuration
-
-1. Server Configuration:
-- Open `server/server.js`
-- The server runs on port 3000 by default
-- CORS is configured to accept connections from any origin
-
-2. Client Configuration:
-- Open `src/app/services/webrtc.service.ts`
-- Update the Socket.IO server URL to match your server's address
-- STUN/TURN server configuration is included for cross-network support
 
 ## Running the Application
 
 1. Start the signaling server:
 ```bash
-cd server
-node server.js
+npm run server
 ```
 
-2. Start the Angular application:
+2. In a new terminal, start the Angular application:
 ```bash
-ng serve
+npm start
 ```
 
-3. Access the application:
-- Open your browser and navigate to `http://localhost:4200`
-- For cross-device testing, use your machine's IP address instead of localhost
+3. Open your browser and navigate to `http://localhost:4200`
 
-## Usage
+## How to Use
 
-1. Creating a Connection:
-   - First user clicks "Create Room"
-   - Waits for the second user to join
+1. **First Device (Sender)**:
+   - Click "Create Room"
+   - A Room ID will be displayed
+   - Share this Room ID with the person you want to connect with
 
-2. Joining a Connection:
-   - Second user clicks "Join Room"
-   - Connection is established automatically
+2. **Second Device (Receiver)**:
+   - Enter the Room ID provided by the sender
+   - Click "Join Room"
+   - Wait for the connection to be established
 
-3. Sending Files:
-   - Click "Choose a file" to select a file
+3. **File Sharing**:
+   - Once connected, either user can send files
+   - Click "Choose a file to share" to select a file
    - Click "Share File" to start the transfer
-   - Progress bar shows transfer status
-
-4. Receiving Files:
-   - File information is displayed when transfer starts
-   - Progress bar shows download progress
-   - Click "Download File" when transfer is complete
+   - The receiver will see the file details and can download it
 
 ## Technical Details
 
-### Client-Side Architecture
-- Built with Angular
-- Uses WebRTC's RTCPeerConnection for peer-to-peer connections
-- Uses WebRTC's RTCDataChannel for file transfer
-- Socket.IO client for signaling
+### Client-side (Angular)
 
-### Server-Side Architecture
-- Node.js with Express
-- Socket.IO for signaling
-- Room-based connection management
-- Handles WebRTC offer/answer exchange
+- Built with Angular v19
+- Uses WebRTC data channels for peer-to-peer communication
+- Real-time progress tracking
+- Handles large files by chunking
 
-### Network Support
-- Uses multiple STUN servers for NAT traversal
-- TURN server support for fallback when direct connection fails
-- Supports both UDP and TCP protocols
+### Server-side (Node.js)
 
-## Troubleshooting
+- Express.js server for signaling
+- Socket.IO for real-time communication
+- Manages room creation and peer connections
+- No file storage - only handles connection setup
 
-1. Connection Issues:
-   - Ensure both peers are using compatible browsers
-   - Check if the signaling server is running
-   - Verify network firewall settings
-   - Check browser console for connection state logs
+### WebRTC Features
 
-2. File Transfer Issues:
-   - Large files are sent in chunks
-   - Progress updates are real-time
-   - Connection status is monitored continuously
+- Uses STUN servers for NAT traversal
+- Implements reliable data transfer
+- Handles connection state management
+- Supports various file types and sizes
 
-## Security Considerations
+## Architecture
 
-- Files are transferred directly between peers
-- No data is stored on the server
-- All connections are peer-to-peer
-- TURN server credentials should be secured in production
+The application follows a clean architecture with separate concerns:
 
-## Known Limitations
+- **Signaling Server**: Handles room creation and peer discovery
+- **WebRTC Service**: Manages peer connections and file transfer
+- **UI Components**: Handle user interaction and file selection
+- **Real-time Updates**: Progress tracking and connection state management
 
-- Requires modern browser with WebRTC support
-- Both peers must be online simultaneously
-- Transfer speed depends on network conditions
-- Maximum file size depends on available memory
+## Browser Support
 
-## Contributing
+This application works on modern browsers that support WebRTC:
+- Chrome (recommended)
+- Firefox
+- Edge
+- Safari
 
-Feel free to submit issues, fork the repository, and create pull requests for any improvements.
+## Development
+
+### Project Structure
+```
+webrtc-file-sharing/
+├── src/
+│   ├── app/
+│   │   ├── components/
+│   │   │   └── file-sharing/
+│   │   └── services/
+│   │       └── webrtc.service.ts
+│   └── ...
+├── server/
+│   └── server.js
+└── ...
+```
+
+### Key Components
+
+- `WebrtcService`: Handles WebRTC connection and file transfer logic
+- `FileSharingComponent`: Main UI component for file sharing
+- `server.js`: Signaling server implementation
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
