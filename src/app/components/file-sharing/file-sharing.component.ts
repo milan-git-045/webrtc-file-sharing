@@ -1,12 +1,13 @@
 import { Component, OnInit, OnDestroy, NgZone, ChangeDetectorRef } from '@angular/core';
 import { WebrtcService } from '../../services/webrtc.service';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-file-sharing',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, FormsModule],
   templateUrl: './file-sharing.component.html',
   styleUrls: ['./file-sharing.component.scss']
 })
@@ -18,6 +19,8 @@ export class FileSharingComponent implements OnInit, OnDestroy {
   receivedFile: { name: string; type: string; size: number } | null = null;
   isSending = false;
   isReceiving = false;
+  roomId: string = '';
+  currentRoomId: string | null = null;
   private subscriptions: Subscription[] = [];
 
   constructor(
@@ -66,6 +69,13 @@ export class FileSharingComponent implements OnInit, OnDestroy {
           }
           this.cdr.detectChanges();
         });
+      }),
+
+      this.webrtcService.roomCreated.subscribe(roomId => {
+        this.ngZone.run(() => {
+          this.currentRoomId = roomId;
+          this.cdr.detectChanges();
+        });
       })
     );
   }
@@ -84,7 +94,15 @@ export class FileSharingComponent implements OnInit, OnDestroy {
 
   async initializeConnection(isInitiator: boolean) {
     try {
-      await this.webrtcService.initiatePeerConnection(isInitiator);
+      if (isInitiator) {
+        await this.webrtcService.initiatePeerConnection(true);
+      } else {
+        if (!this.roomId) {
+          alert('Please enter a Room ID to join');
+          return;
+        }
+        await this.webrtcService.joinRoom(this.roomId);
+      }
     } catch (error) {
       console.error('Failed to initialize connection:', error);
     }

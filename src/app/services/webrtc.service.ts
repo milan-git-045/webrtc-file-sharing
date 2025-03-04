@@ -24,17 +24,20 @@ export class WebrtcService {
   public fileSent = new Subject<void>();
   public connectionState = new BehaviorSubject<'disconnected' | 'connecting' | 'connected'>('disconnected');
   public connectionError = new Subject<string>();
+  public roomCreated = new Subject<string>();
   private pendingFile: { file: File, resolve: () => void, reject: (error: Error) => void } | null = null;
 
   constructor() {
-    this.socket = io('http://192.168.28.46:3000');
+    this.socket = io('http://192.168.29.144:3000');
     this.setupSocketListeners();
+    console.log("currentRoom : " + this.currentRoom);
   }
 
   private setupSocketListeners() {
     this.socket.on('room-created', (roomId: string) => {
       console.log('Room created:', roomId);
       this.currentRoom = roomId;
+      this.roomCreated.next(roomId);
       this.connectionState.next('connecting');
     });
 
@@ -66,6 +69,7 @@ export class WebrtcService {
       console.log('Peer disconnected');
       this.connectionState.next('disconnected');
       this.resetConnection();
+      this.currentRoom = null;
     });
 
     this.socket.on('offer', async (offer: RTCSessionDescriptionInit) => {
@@ -94,7 +98,6 @@ export class WebrtcService {
 
   public async initiatePeerConnection(isInitiator: boolean) {
     this.resetConnection();
-    
     this.peerConnection = new RTCPeerConnection(this.configuration);
 
     this.peerConnection.oniceconnectionstatechange = () => {
@@ -114,6 +117,7 @@ export class WebrtcService {
 
     if (isInitiator) {
       // Create room and wait for peer
+      this.currentRoom = null;
       this.socket.emit('create-room');
       this.dataChannel = this.peerConnection.createDataChannel('fileTransfer');
       this.setupDataChannel();
@@ -123,9 +127,16 @@ export class WebrtcService {
         this.dataChannel = event.channel;
         this.setupDataChannel();
       };
-      // Get available rooms and join
-      this.socket.emit('join-room', this.currentRoom);
     }
+  }
+
+  public async joinRoom(roomId: string) {
+    await this.initiatePeerConnection(false);
+    this.socket.emit('join-room', roomId);
+  }
+
+  public getCurrentRoom(): string | null {
+    return this.currentRoom;
   }
 
   private resetConnection() {
@@ -135,7 +146,6 @@ export class WebrtcService {
     if (this.dataChannel) {
       this.dataChannel.close();
     }
-    this.currentRoom = null;
     this.resetFileTransfer();
   }
 
@@ -190,7 +200,7 @@ export class WebrtcService {
           this.currentFileChunks.push(data);
           const currentSize = this.currentFileChunks.reduce((total, chunk) => total + chunk.byteLength, 0);
           const progress = Math.min((currentSize / this.currentFileMetadata.size) * 100, 100);
-          
+
           setTimeout(() => {
             this.fileProgress.next(progress);
           });
@@ -239,7 +249,7 @@ export class WebrtcService {
 
       try {
         this.fileProgress.next(0);
-        
+
         this.dataChannel.send(JSON.stringify({
           name: file.name,
           type: file.type,
@@ -253,10 +263,10 @@ export class WebrtcService {
               offset += chunkSize;
 
               const progress = Math.min((offset / file.size) * 100, 100);
-              
+
               setTimeout(() => {
                 this.fileProgress.next(progress);
-                
+
                 if (progress >= 100) {
                   // Notify that file sending is complete
                   setTimeout(() => {

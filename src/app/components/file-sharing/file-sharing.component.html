@@ -4,20 +4,21 @@
     <div class="connection-status">
       Status: {{ connectionStatus }}
     </div>
-    <!-- <div class="connection-info">
-      <p class="info-text">To share files:</p>
-      <ol>
-        <li>First user clicks "Create Room" to start a sharing session</li>
-        <li>Second user clicks "Join Room" to connect to the session</li>
-        <li>Once connected, you can share files between devices</li>
-      </ol>
-    </div> -->
+    <div class="room-info" *ngIf="currentRoomId">
+      <p>Your Room ID: <strong>{{ currentRoomId }}</strong></p>
+      <p class="help-text">Share this ID with the person you want to connect with</p>
+    </div>
+    <div class="join-room-container" *ngIf="!currentRoomId">
+      <input type="text" [(ngModel)]="roomId" placeholder="Enter Room ID to join"
+        [disabled]="connectionStatus === 'connecting'" class="room-input">
+    </div>
     <div class="button-group">
       <button (click)="initializeConnection(true)" class="btn primary" [disabled]="connectionStatus === 'connecting'">
         Create Room
         <small *ngIf="connectionStatus === 'connecting'">Waiting for peer...</small>
       </button>
-      <button (click)="initializeConnection(false)" class="btn secondary" [disabled]="connectionStatus === 'connecting'">
+      <button (click)="initializeConnection(false)" class="btn secondary"
+        [disabled]="connectionStatus === 'connecting' || !roomId">
         Join Room
         <small *ngIf="connectionStatus === 'connecting'">Connecting to peer...</small>
       </button>
@@ -26,7 +27,7 @@
 
   <div class="file-transfer-controls" *ngIf="connectionStatus === 'connected'">
     <h3>Connected to Peer!</h3>
-    
+
     <!-- Sender Controls -->
     <div class="sender-controls" *ngIf="!receivedFile">
       <div class="file-input-container">
@@ -36,9 +37,7 @@
         </label>
       </div>
 
-      <button (click)="sendFile()" 
-              [disabled]="!selectedFile || isSending" 
-              class="btn primary">
+      <button (click)="sendFile()" [disabled]="!selectedFile || isSending" class="btn primary">
         <ng-container *ngIf="!isSending">Share File</ng-container>
         <ng-container *ngIf="isSending">Sending... {{ transferProgress | number:'1.0-0' }}%</ng-container>
       </button>

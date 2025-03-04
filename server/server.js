@@ -32,7 +32,9 @@ io.on('connection', (socket) => {
 
   // Handle room joining
   socket.on('join-room', (roomId) => {
+    console.log('User joined room:', roomId);
     const room = rooms.get(roomId);
+    console.log('find room ', room);
     if (room && !room.joiner) {
       room.joiner = socket.id;
       console.log(`User ${socket.id} joined room ${roomId}`);
