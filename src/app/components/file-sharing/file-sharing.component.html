@@ -1,0 +1,66 @@
+<div class="file-sharing-container">
+  <div class="connection-controls" *ngIf="connectionStatus !== 'connected'">
+    <h2>WebRTC File Sharing</h2>
+    <div class="connection-status">
+      Status: {{ connectionStatus }}
+    </div>
+    <!-- <div class="connection-info">
+      <p class="info-text">To share files:</p>
+      <ol>
+        <li>First user clicks "Create Room" to start a sharing session</li>
+        <li>Second user clicks "Join Room" to connect to the session</li>
+        <li>Once connected, you can share files between devices</li>
+      </ol>
+    </div> -->
+    <div class="button-group">
+      <button (click)="initializeConnection(true)" class="btn primary" [disabled]="connectionStatus === 'connecting'">
+        Create Room
+        <small *ngIf="connectionStatus === 'connecting'">Waiting for peer...</small>
+      </button>
+      <button (click)="initializeConnection(false)" class="btn secondary" [disabled]="connectionStatus === 'connecting'">
+        Join Room
+        <small *ngIf="connectionStatus === 'connecting'">Connecting to peer...</small>
+      </button>
+    </div>
+  </div>
+
+  <div class="file-transfer-controls" *ngIf="connectionStatus === 'connected'">
+    <h3>Connected to Peer!</h3>
+    
+    <!-- Sender Controls -->
+    <div class="sender-controls" *ngIf="!receivedFile">
+      <div class="file-input-container">
+        <input type="file" (change)="onFileSelected($event)" id="fileInput" [disabled]="isSending" />
+        <label for="fileInput" class="file-label" [class.disabled]="isSending">
+          {{ selectedFile?.name || 'Choose a file to share' }}
+        </label>
+      </div>
+
+      <button (click)="sendFile()" 
+              [disabled]="!selectedFile || isSending" 
+              class="btn primary">
+        <ng-container *ngIf="!isSending">Share File</ng-container>
+        <ng-container *ngIf="isSending">Sending... {{ transferProgress | number:'1.0-0' }}%</ng-container>
+      </button>
+    </div>
+
+    <!-- Receiver Controls -->
+    <div class="receiver-controls" *ngIf="receivedFile">
+      <div class="file-info">
+        <h4>File Ready to Download</h4>
+        <p>Name: {{ receivedFile.name }}</p>
+        <p>Size: {{ formatFileSize(receivedFile.size) }}</p>
+        <p>Type: {{ receivedFile.type || 'Unknown' }}</p>
+      </div>
+      <button (click)="downloadFile()" class="btn primary">
+        Download File
+      </button>
+    </div>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar" *ngIf="transferProgress > 0">
+      <div class="progress" [style.width.%]="transferProgress"></div>
+      <span class="progress-text">{{ transferProgress | number:'1.0-0' }}%</span>
+    </div>
+  </div>
+</div>
