@@ -17,7 +17,7 @@ export class WebrtcService {
   };
 
   private currentFileMetadata: { name: string; type: string; size: number } | null = null;
-  private currentFileChunks: ArrayBuffer[] = [];
+  private receivedFileBlob: Blob | null = null;
 
   public fileProgress = new Subject<number>();
   public fileReceived = new Subject<{ name: string; type: string; size: number }>();
@@ -26,6 +26,13 @@ export class WebrtcService {
   public connectionError = new Subject<string>();
   public roomCreated = new Subject<string>();
   private pendingFile: { file: File, resolve: () => void, reject: (error: Error) => void } | null = null;
+
+  // File transfer configuration
+  private readonly CHUNK_SIZE = 64 * 1024; // 64KB chunks
+  private readonly MAX_BUFFER_SIZE = 1024 * 1024; // 1MB buffer
+  private fileReader: FileReader | null = null;
+  private currentOffset = 0;
+  private sendingInProgress = false;
 
   constructor() {
     this.socket = io('http://192.168.29.144:3000');
@@ -151,12 +158,50 @@ export class WebrtcService {
 
   private setupDataChannel() {
     this.dataChannel.binaryType = 'arraybuffer';
+    let receivedSize = 0;
+    let expectedSize = 0;
+    const chunks: ArrayBuffer[] = [];
+
+    this.dataChannel.onmessage = async (event) => {
+      const data = event.data;
+      
+      if (typeof data === 'string') {
+        try {
+          const metadata = JSON.parse(data);
+          this.currentFileMetadata = metadata;
+          expectedSize = metadata.size;
+          receivedSize = 0;
+          chunks.length = 0;
+          this.receivedFileBlob = null;
+          this.fileProgress.next(0);
+          console.log('Receiving file:', metadata);
+        } catch (error) {
+          console.error('Error parsing file metadata:', error);
+        }
+      } else if (data instanceof ArrayBuffer && this.currentFileMetadata) {
+        chunks.push(data);
+        receivedSize += data.byteLength;
+        
+        // Calculate progress
+        const progress = Math.min(100, Math.round((receivedSize * 100) / expectedSize));
+        this.fileProgress.next(progress);
+
+        // Check if file is complete
+        if (receivedSize >= expectedSize) {
+          this.receivedFileBlob = new Blob(chunks, { type: this.currentFileMetadata.type });
+          this.fileReceived.next(this.currentFileMetadata);
+          
+          // Clear temporary chunks array but keep the blob for download
+          chunks.length = 0;
+        }
+      }
+    };
 
     this.dataChannel.onopen = () => {
       console.log('DataChannel is open');
       this.connectionState.next('connected');
       if (this.pendingFile) {
-        this.sendFileData(this.pendingFile.file)
+        this.sendFile(this.pendingFile.file)
           .then(() => {
             this.pendingFile?.resolve();
             this.pendingFile = null;
@@ -182,122 +227,95 @@ export class WebrtcService {
       }
       this.resetFileTransfer();
     };
-
-    this.dataChannel.onmessage = (event) => {
-      const data = event.data;
-      if (typeof data === 'string') {
-        try {
-          const metadata = JSON.parse(data);
-          this.currentFileMetadata = metadata;
-          this.currentFileChunks = [];
-          console.log('Receiving file:', metadata);
-          this.fileProgress.next(0);
-        } catch (error) {
-          console.error('Error parsing file metadata:', error);
-        }
-      } else {
-        if (this.currentFileMetadata) {
-          this.currentFileChunks.push(data);
-          const currentSize = this.currentFileChunks.reduce((total, chunk) => total + chunk.byteLength, 0);
-          const progress = Math.min((currentSize / this.currentFileMetadata.size) * 100, 100);
-
-          setTimeout(() => {
-            this.fileProgress.next(progress);
-          });
-
-          if (currentSize >= this.currentFileMetadata.size) {
-            setTimeout(() => {
-              this.fileReceived.next(this.currentFileMetadata!);
-              this.fileProgress.next(0); // Reset progress after completion
-              console.log('File transfer complete');
-            });
-          }
-        }
-      }
-    };
   }
 
   private resetFileTransfer() {
     this.currentFileMetadata = null;
-    this.currentFileChunks = [];
+    this.receivedFileBlob = null;
     this.fileProgress.next(0);
   }
 
-  public getReceivedFileBlob(): Blob | null {
-    if (!this.currentFileMetadata || this.currentFileChunks.length === 0) {
-      return null;
-    }
-
-    return new Blob(this.currentFileChunks, { type: this.currentFileMetadata.type });
-  }
-
   public async sendFile(file: File): Promise<void> {
-    if (!this.dataChannel || this.dataChannel.readyState !== 'open') {
-      console.log('DataChannel not ready, queuing file');
-      return new Promise((resolve, reject) => {
-        this.pendingFile = { file, resolve, reject };
-      });
+    if (this.sendingInProgress) {
+      throw new Error('A file transfer is already in progress');
     }
-    return this.sendFileData(file);
+
+    try {
+      this.sendingInProgress = true;
+      
+      // Send file metadata first
+      const metadata = {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        chunks: Math.ceil(file.size / this.CHUNK_SIZE)
+      };
+      this.dataChannel.send(JSON.stringify(metadata));
+
+      // Reset state
+      this.currentOffset = 0;
+      this.fileReader = new FileReader();
+      
+      await this.sendFileChunks(file);
+      
+      this.fileSent.next();
+    } finally {
+      this.sendingInProgress = false;
+      this.fileReader = null;
+      this.currentOffset = 0;
+    }
   }
 
-  private async sendFileData(file: File): Promise<void> {
+  private async sendFileChunks(file: File): Promise<void> {
     return new Promise((resolve, reject) => {
-      const chunkSize = 16384;
-      const fileReader = new FileReader();
-      let offset = 0;
-
-      try {
-        this.fileProgress.next(0);
-
-        this.dataChannel.send(JSON.stringify({
-          name: file.name,
-          type: file.type,
-          size: file.size
-        }));
-
-        fileReader.onload = (e) => {
-          if (e.target?.result && this.dataChannel.readyState === 'open') {
-            try {
-              this.dataChannel.send(e.target.result as ArrayBuffer);
-              offset += chunkSize;
-
-              const progress = Math.min((offset / file.size) * 100, 100);
-
-              setTimeout(() => {
-                this.fileProgress.next(progress);
-
-                if (progress >= 100) {
-                  // Notify that file sending is complete
-                  setTimeout(() => {
-                    this.fileSent.next();
-                    this.fileProgress.next(0);
-                    resolve();
-                  }, 100);
-                } else if (offset < file.size) {
-                  readSlice(offset);
-                }
-              });
-            } catch (error) {
-              reject(error);
-            }
-          }
-        };
-
-        fileReader.onerror = () => {
-          reject(new Error('Error reading file'));
-        };
-
-        const readSlice = (o: number) => {
-          const slice = file.slice(o, o + chunkSize);
-          fileReader.readAsArrayBuffer(slice);
-        };
-
-        readSlice(0);
-      } catch (error) {
-        reject(error);
+      if (!this.fileReader) {
+        reject(new Error('FileReader not initialized'));
+        return;
       }
+
+      this.fileReader.onerror = () => {
+        reject(new Error('Error reading file'));
+      };
+
+      this.fileReader.onload = async (e) => {
+        if (e.target?.result instanceof ArrayBuffer) {
+          try {
+            // Wait if the buffer is too full
+            while (this.dataChannel.bufferedAmount > this.MAX_BUFFER_SIZE) {
+              await new Promise(r => setTimeout(r, 100));
+            }
+
+            this.dataChannel.send(e.target.result);
+            this.currentOffset += this.CHUNK_SIZE;
+
+            // Calculate and emit progress
+            const progress = Math.min(100, Math.round((this.currentOffset * 100) / file.size));
+            this.fileProgress.next(progress);
+
+            // Read next chunk or finish
+            if (this.currentOffset < file.size) {
+              this.readNextChunk(file);
+            } else {
+              resolve();
+            }
+          } catch (error) {
+            reject(error);
+          }
+        }
+      };
+
+      // Start reading the first chunk
+      this.readNextChunk(file);
     });
+  }
+
+  private readNextChunk(file: File) {
+    const slice = file.slice(this.currentOffset, this.currentOffset + this.CHUNK_SIZE);
+    this.fileReader?.readAsArrayBuffer(slice);
+  }
+
+  public getReceivedFileBlob(): Blob | null {
+    return this.receivedFileBlob;
   }
 
   public async handleOffer(offer: RTCSessionDescriptionInit) {
